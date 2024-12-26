@@ -76,8 +76,11 @@ chrome.runtime.onMessage.addListener(
     }
 );
 
-document.getElementsByClassName('buttons__button start-button')[0].addEventListener("click", (e) => {
-    if (e.shiftKey && !local.ips.includes(remoteIP.innerText)) {
-        syncBlackList()
-    }
-})
+document.addEventListener('DOMContentLoaded', () => {
+    const startButton = document.getElementsByClassName('buttons__button start-button')[0];
+    startButton.addEventListener("click", (e) => {
+        if (e.shiftKey && !local.ips.includes(remoteIP.innerText)) {
+            syncBlackList();
+        }
+    });
+});

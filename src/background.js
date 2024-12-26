@@ -1,4 +1,4 @@
-var defaults = {
+const defaults = {
     mirror: false,
     mirrorAlt: false,
     prikol: false,
@@ -74,59 +74,66 @@ var defaults = {
     darkMode: false,
     hideLogo: false
 };
+
+// Initialize default settings in storage
 chrome.storage.sync.get(defaults, function (result) {
     chrome.storage.sync.set(result);
 });
 
-chrome.storage.local.get({ips: []}, function (result) {
-    chrome.storage.local.set(result)
-})
+chrome.storage.local.get({ ips: [] }, function (result) {
+    chrome.storage.local.set(result);
+});
 
-var tabId = -1,
+let tabId = -1,
     chatId = -1,
     curId = -1;
 
+// Listen for keyboard shortcuts (commands)
 chrome.commands.onCommand.addListener(function (command) {
     switch (command) {
         case "switch":
-            if (curId === -1 || chatId === -1 || tabId === -1)
-                return
-            if (curId == chatId) {
-                chrome.tabs.update(tabId, {selected: true});
+            if (curId === -1 || chatId === -1 || tabId === -1) return;
+            if (curId === chatId) {
+                chrome.tabs.update(tabId, { active: true });
                 curId = tabId;
             } else {
-                chrome.tabs.update(chatId, {selected: true});
+                chrome.tabs.update(chatId, { active: true });
                 curId = chatId;
             }
             break;
 
         default:
-            chrome.tabs.query({active: true, currentWindow: true}, function (tabs) {
-                chrome.tabs.sendMessage(tabs[0].id, {command: command});
+            chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+                chrome.tabs.sendMessage(tabs[0].id, { command: command });
             });
-            chrome.tabs.sendMessage(chatId, {command: command});
+            chrome.tabs.sendMessage(chatId, { command: command });
             break;
     }
 });
 
+// Listen for tab activation and manage tabs
 chrome.tabs.onActivated.addListener(function (chTab) {
-    chrome.tabs.get(chTab["tabId"], function (tab) {
-        if (tab["url"].search(".*videochatru.com.*") != -1) {
-            chatId = tab["id"];
+    chrome.tabs.get(chTab.tabId, function (tab) {
+        if (tab.url.includes("videochatru.com")) {
+            chatId = tab.id;
         } else {
-            tabId = tab["id"];
+            tabId = tab.id;
         }
-        curId = tab["id"];
+        curId = tab.id;
     });
 });
 
-chrome.runtime.setUninstallURL("https://docs.google.com/forms/d/1TIynfMSRGrFb7_Co9Rb0ZEhts3WROMRcrCNPV8XE0ls")
+// Set the uninstall URL
+chrome.runtime.setUninstallURL("https://docs.google.com/forms/d/1TIynfMSRGrFb7_Co9Rb0ZEhts3WROMRcrCNPV8XE0ls");
 
-chrome.browserAction.onClicked.addListener(function (tab) {
-    chrome.tabs.create({url: "https://videochatru.com/embed/"});
+// Listen for browser action clicks (extension icon)
+chrome.action.onClicked.addListener(function () {
+    chrome.tabs.create({ url: "https://videochatru.com/embed/" });
 });
 
+// Handle installation events
 chrome.runtime.onInstalled.addListener(function (details) {
-    if (details.reason === "install")
-        chrome.tabs.create({url: "https://videochatru.com/embed/"});
+    if (details.reason === "install") {
+        chrome.tabs.create({ url: "https://videochatru.com/embed/" });
+    }
 });
