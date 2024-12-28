@@ -10,8 +10,8 @@ let settings = {},
     tim,
     dc,
     faceApiLoaded = false,
-    buttons = $(".buttons")[0],
-    chat = $(".chat")[0],
+    buttons = null,
+    chat = null,
     resize = false,
     language = window.navigator.language.slice(0, 2),
     timeout,
@@ -130,9 +130,9 @@ const onUpdateIP = function (mutations) {
                     targetSound.play();
                 }
 
-                clearInterval(searchInterval); // Stop searching once the element is found
+                clearInterval(searchInterval);
             }
-        }, 100); // Check every 1000ms (1 second)
+        }, 100);
 
         return
 
@@ -409,10 +409,14 @@ async function detectGender() {
         tim = setTimeout(detectGender, 500)
 }
 
+let startInterval = null
 chrome.storage.sync.get(null, function (result) {
     settings = result;
 
     document.addEventListener('DOMContentLoaded', () => {
+        buttons = $(".buttons")[0]
+        chat = $(".chat")[0]
+
         injectInterface()
 
         if (settings.hideLogo) {
@@ -435,7 +439,10 @@ chrome.storage.sync.get(null, function (result) {
             $("#local-video-wrapper")[0].style.display = "none"
         }
 
-        setInterval(() => {
+        if (startInterval) {
+            clearInterval(startInterval);
+        }
+        startInterval = setInterval(() => {
             if (settings.skipFourSec) {
                 try {
                     if ((stage === 2) && (found + 4000 < Date.now())) {
@@ -447,7 +454,7 @@ chrome.storage.sync.get(null, function (result) {
                     //console.dir(e)
                 }
             }
-        }, 1000)
+        }, 100)
 
         if (settings.autoResume) {
             document.getElementById('overlay').style.background = "none"
