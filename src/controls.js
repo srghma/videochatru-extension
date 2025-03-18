@@ -155,10 +155,12 @@ function injectInterface() {
     }).addTo(map);
 
 
+    mySkipSound = new Audio(chrome.runtime.getURL('resources/audio/skip.mp3'))
     male = new Audio(chrome.runtime.getURL('resources/audio/male.mp3'))
     ban = new Audio(chrome.runtime.getURL('resources/audio/ban.mp3'))
     targetSound = new Audio(chrome.runtime.getURL('resources/audio/found.mp3'))
 
+    mySkipSound.volume = 0.3
     male.volume = 0.3
     ban.volume = 0.45
     targetSound.volume = 0.5

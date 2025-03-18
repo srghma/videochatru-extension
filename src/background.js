@@ -11,7 +11,7 @@ const defaults = {
     possibleReview: false,
     ws: false,
     nsfw: false,
-    skipSound: false,
+    skipSound: true,
     enableFaceApi: false,
     skipFourSec: false,
     autoResume: false,
