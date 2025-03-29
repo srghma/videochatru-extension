@@ -83,10 +83,21 @@ function stopAndStart(delay) {
   }
 }
 
+const [textToWrite_first, ...textToWrite] = [
+  `В Википедии написано: Первым живым существом на нашей планете была случайно-появившаяся молекула-робот-саморепликатор (делает копии себя).`,
+  `Она эволюционировала из автокатализатора (катализатор + молекула которая создает катализатор).`,
+  `Если бы у вас было лекарство от старости И смерти, то вы бы поделились с людьми?`,
+  `Я желаю вам вечной жизни и бесконечного количества детей, ведь во Вселенной бесконечное количество еды, территорий и энергии. Люди могут жить вечно.`,
+  `Люди МОГУТ остановить термическую смерть вселенной. Программу умерших людей можно воскрешать по памяти друзей.`,
+  `Русские пытали моего друга Ивана.`,
+]
+
+let currentTextToWrite = textToWrite.slice()
+
 document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementsByClassName("buttons__button start-button")[0]
-    .addEventListener("click", (e) => {
+    .addEventListener("click", (_e) => {
       if (stage === 3) settings.stats.countManSkip++;
 
       clearTimeout(timeout);
@@ -94,14 +105,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document
     .getElementsByClassName("buttons__button stop-button")[0]
-    .addEventListener("click", (e) => {
+    .addEventListener("click", (_e) => {
       clearTimeout(timeout);
     });
+
+  // console.log('document loaded')
+  document.addEventListener('keyup', function (e) {
+    // console.log('keyup', e.key)
+    switch (e.key) {
+      case "ArrowUp":
+        if (currentTextToWrite[0]) {
+          writeTextToTextarea_(currentTextToWrite[0])
+        }
+        // remove first
+        currentTextToWrite.shift()
+        break;
+    }
+  })
 });
 
-let searchInterval = null;
+// writeTextToTextarea_(`srghma Сергей Хома.`)
+// writeTextToTextarea_(`  `)
+//
+//
+// Законы вселенной СОЗДАЮТ автокатализатор (катализатор + молекула которая создает катализатор) ЭВОЛЮЦИОНИРУЮТ В молекулу кристалл-форму ЭВОЛЮЦИОНИРУЮТ В молекулy-робот.
+
+
+async function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 function writeTextToTextarea_(textToWrite) {
+  // console.log(textToWrite)
   const input = document.querySelector(".chat input.chat__textarea");
   input.value = textToWrite;
 
@@ -118,31 +151,64 @@ function writeTextToTextarea_(textToWrite) {
   input.dispatchEvent(enterEvent);
 }
 
-function writeTextToTextarea() {
-  writeTextToTextarea_(`srghma Сергей Хома.`)
-  writeTextToTextarea_(`Первым живым существом на нашей планете была случайно-появившаяся молекула-робот-саморепликатор.`)
-  writeTextToTextarea_(`Русские пытали моего друга Ивана.`)
-  writeTextToTextarea_(`Я желаю вам вечной жизни и бесконечного количества детей, ведь во Вселенной бесконечное количество еды, территорий и энергии. Люди могут жить вечно.`)
+async function writeTextToTextarea(isCancelledRef) {
+  writeTextToTextarea_(textToWrite_first)
+  // if (isCancelledRef.value) { console.log('return1'); return }
+  // await sleep(3000)
+  // if (isCancelledRef.value) { console.log('return2'); return }
+  // writeTextToTextarea_(`Первым живым существом на нашей планете была молекула - робот - саморепликатор(делает копии себя), которая эволюционировала из автокатализатора(катализатор + молекула которая создает катализатор).`)
+  // if (isCancelledRef.value) { console.log('return3'); return }
+  // await sleep(5000)
+  // if (isCancelledRef.value) { console.log('return4'); return }
+  // writeTextToTextarea_(`Если бы у вас было лекарство от старости И смерти, то вы бы поделились с людьми ? `)
+  // if (isCancelledRef.value) { console.log('return5'); return }
+  // await sleep(5000)
+  // if (isCancelledRef.value) { console.log('return6'); return }
+  // writeTextToTextarea_(`Я желаю вам вечной жизни и бесконечного количества детей, ведь во Вселенной бесконечное количество еды, территорий и энергии.Люди могут жить вечно.`)
+  // await sleep(5000)
+  // if (isCancelledRef.value) { console.log('return6'); return }
+  // writeTextToTextarea_(`Русские пытали моего друга Ивана.`)
 }
 
-function debounce(func, wait, immediate) {
+// Create a cancellation token object
+function createCancellationToken() {
+  return { value: false };
+}
+
+// Modify the debounce function to support async cancellation
+function debounce(func, wait) {
   let timeout;
-  return function () {
-    const context = this;
-    const args = arguments;
+  let currentCancellationToken = null;
+  let currentPromise = null;
+
+  return function (...args) {
+    // Cancel any ongoing operation
+    if (currentCancellationToken) {
+      currentCancellationToken.value = true;
+    }
+
+    // Create a new cancellation token
+    const cancellationToken = createCancellationToken();
+    currentCancellationToken = cancellationToken;
+
     const later = function () {
       timeout = null;
-      if (!immediate) func.apply(context, args);
+      // Execute the function with the new cancellation token
+      currentPromise = func(cancellationToken, ...args);
     };
-    const callNow = immediate && !timeout;
+
     clearTimeout(timeout);
     timeout = setTimeout(later, wait);
-    if (callNow) func.apply(context, args);
+
+    // Return a promise that can be awaited
+    return currentPromise;
   };
 }
 
-const writeTextToTextarea__debounced = debounce(writeTextToTextarea, 1000);
 
+const writeTextToTextarea__debounced = debounce(writeTextToTextarea, 3000);
+
+let searchInterval = null;
 const onUpdateIP = function (mutations) {
   if (remoteIP.innerText === "-" || remoteIP.innerText === "") return;
   console.dir("IP CHANGE DETECTED");
@@ -307,6 +373,8 @@ const onChangeStage = function (mutations) {
       if (stage === 3) {
         settings.stats.time += parseInt((Date.now() - play) / 1000);
       }
+
+      currentTextToWrite = textToWrite.slice()
 
       const attributeValue = $(mutation.target).prop(mutation.attributeName);
       if (attributeValue.includes("s-search")) {

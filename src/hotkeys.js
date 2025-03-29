@@ -14,18 +14,18 @@ function hotkeys(e) {
             }
             break;
 
-        case "ArrowUp":
-            document.getElementsByClassName('buttons__button stop-button')[0].click()
-            break;
-
-        case "ArrowDown":
-            document.getElementsByClassName("message-report-link tr")[0].click()
-            break;
-
-        case "ArrowRight":
-            if (document.getElementById("report-popup").style.display === "block")
-                document.getElementsByClassName("btn btn-main send-report")[1].click()
-            break;
+        // case "ArrowUp":
+        //     document.getElementsByClassName('buttons__button stop-button')[0].click()
+        //     break;
+        //
+        // case "ArrowDown":
+        //     document.getElementsByClassName("message-report-link tr")[0].click()
+        //     break;
+        //
+        // case "ArrowRight":
+        //     if (document.getElementById("report-popup").style.display === "block")
+        //         document.getElementsByClassName("btn btn-main send-report")[1].click()
+        //     break;
     }
 }
 
