@@ -241,7 +241,9 @@ const onUpdateIP = function (mutations) {
         } else {
           targetSound.play();
 
-          $.getJSON(`http://localhost:3300/autoplay_start`);
+          $.getJSON(
+            `http://localhost:3300/autoplay_start?waitMilliseconds=2000`,
+          );
 
           // writeTextToTextarea__debounced();
         }

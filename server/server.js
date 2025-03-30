@@ -13,6 +13,7 @@ import {
 } from "node:child_process";
 const exec = util.promisify(execCallback);
 const execFile = util.promisify(execFileCallback);
+import morgan from "morgan";
 
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -123,6 +124,8 @@ const playAudio = async (lineIndex) => {
 
 const app = express();
 
+app.use(morgan("combined"));
+
 app.get("/next", async (_req, res) => {
   if (state.currentAudioProcess) {
     state.currentAudioProcess.kill();
@@ -148,20 +151,22 @@ app.get("/stop", (_req, res) => {
 });
 
 app.get("/autoplay_start", async (req, res) => {
-  if (!state.autoplaying) {
-    state.autoplaying = true;
-    while (state.autoplaying) {
-      if (state.currentAudioProcess) {
-        state.currentAudioProcess.kill();
-      }
-      await new Promise((resolve) =>
-        setTimeout(resolve, req.params.waitMilliseconds || 2000),
-      );
-      if (!state.autoplaying) break; // Check if stopped during wait
-      await playAudio(state.lastReadLineIndex + 1);
-      // await new Promise((resolve) => setTimeout(resolve, 3000));
-    }
+  if (state.autoplaying) {
+    return res.send("Autoplay already started");
   }
+
+  state.autoplaying = true;
+  while (state.autoplaying) {
+    if (state.currentAudioProcess) {
+      state.currentAudioProcess.kill();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    if (!state.autoplaying) break; // autoplay_stop was called
+    await playAudio(state.lastReadLineIndex);
+    state.lastReadLineIndex = state.lastReadLineIndex + 1;
+    // await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+
   res.send("Autoplay started");
 });
 
@@ -179,9 +184,9 @@ app.get("/choose/:line", async (req, res) => {
     state.currentAudioProcess.kill();
   }
   console.log("Playing ", req.params);
-  const lineIndex = parseInt(req.params.line, 10);
-  await playAudio(lineIndex);
-  res.send(`Playing chosen line ${lineIndex}`);
+  const lineNumber = parseInt(req.params.line, 10);
+  await playAudio(lineNumber - 1);
+  res.send(`Playing chosen line ${lineNumber}`);
 });
 
 async function showRofiDialog_() {
@@ -212,7 +217,7 @@ async function showRofiDialog() {
     throw new Error("No selection made");
   }
   const lineIndexString = chosen.split(":")[0].trim();
-  return parseInt(lineIndexString, 10);
+  return parseInt(lineIndexString, 10) - 1;
 }
 
 app.get("/rofi", async (_req, res) => {
