@@ -83,16 +83,16 @@ function stopAndStart(delay) {
   }
 }
 
-const [textToWrite_first, ...textToWrite] = [
-  `В Википедии написано: Первым живым существом на нашей планете была случайно-появившаяся молекула-робот-саморепликатор (делает копии себя).`,
-  `Она эволюционировала из автокатализатора (катализатор + молекула которая создает катализатор).`,
-  `Если бы у вас было лекарство от старости И смерти, то вы бы поделились с людьми?`,
-  `Я желаю вам вечной жизни и бесконечного количества детей, ведь во Вселенной бесконечное количество еды, территорий и энергии. Люди могут жить вечно.`,
-  `Люди МОГУТ остановить термическую смерть вселенной. Программу умерших людей можно воскрешать по памяти друзей.`,
-  `Русские пытали моего друга Ивана.`,
-]
+// const [textToWrite_first, ...textToWrite] = [
+//   `В Википедии написано: Первым живым существом на нашей планете была случайно-появившаяся молекула-робот-саморепликатор (делает копии себя).`,
+//   `Она эволюционировала из автокатализатора (катализатор + молекула которая создает катализатор).`,
+//   `Если бы у вас было лекарство от старости И смерти, то вы бы поделились с людьми?`,
+//   `Я желаю вам вечной жизни и бесконечного количества детей, ведь во Вселенной бесконечное количество еды, территорий и энергии. Люди могут жить вечно.`,
+//   `Люди МОГУТ остановить термическую смерть вселенной. Программу умерших людей можно воскрешать по памяти друзей.`,
+//   `Русские пытали моего друга Ивана.`,
+// ]
 
-let currentTextToWrite = textToWrite.slice()
+// let currentTextToWrite = textToWrite.slice()
 
 document.addEventListener("DOMContentLoaded", () => {
   document
@@ -109,19 +109,19 @@ document.addEventListener("DOMContentLoaded", () => {
       clearTimeout(timeout);
     });
 
-  // console.log('document loaded')
-  document.addEventListener('keyup', function (e) {
-    // console.log('keyup', e.key)
-    switch (e.key) {
-      case "ArrowUp":
-        if (currentTextToWrite[0]) {
-          writeTextToTextarea_(currentTextToWrite[0])
-        }
-        // remove first
-        currentTextToWrite.shift()
-        break;
-    }
-  })
+  // // console.log('document loaded')
+  // document.addEventListener('keyup', function (e) {
+  //   // console.log('keyup', e.key)
+  //   switch (e.key) {
+  //     case "ArrowUp":
+  //       if (currentTextToWrite[0]) {
+  //         writeTextToTextarea_(currentTextToWrite[0])
+  //       }
+  //       // remove first
+  //       currentTextToWrite.shift()
+  //       break;
+  //   }
+  // })
 });
 
 // writeTextToTextarea_(`srghma Сергей Хома.`)
@@ -130,8 +130,9 @@ document.addEventListener("DOMContentLoaded", () => {
 //
 // Законы вселенной СОЗДАЮТ автокатализатор (катализатор + молекула которая создает катализатор) ЭВОЛЮЦИОНИРУЮТ В молекулу кристалл-форму ЭВОЛЮЦИОНИРУЮТ В молекулy-робот.
 
-
-async function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function writeTextToTextarea_(textToWrite) {
   // console.log(textToWrite)
@@ -146,13 +147,13 @@ function writeTextToTextarea_(textToWrite) {
     key: "Enter",
     keyCode: 13,
     code: "Enter",
-    bubbles: true
+    bubbles: true,
   });
   input.dispatchEvent(enterEvent);
 }
 
 async function writeTextToTextarea(isCancelledRef) {
-  writeTextToTextarea_(textToWrite_first)
+  // writeTextToTextarea_(textToWrite_first)
   // if (isCancelledRef.value) { console.log('return1'); return }
   // await sleep(3000)
   // if (isCancelledRef.value) { console.log('return2'); return }
@@ -205,7 +206,6 @@ function debounce(func, wait) {
   };
 }
 
-
 const writeTextToTextarea__debounced = debounce(writeTextToTextarea, 3000);
 
 let searchInterval = null;
@@ -241,7 +241,9 @@ const onUpdateIP = function (mutations) {
         } else {
           targetSound.play();
 
-          writeTextToTextarea__debounced();
+          $.getJSON(`http://localhost:3300/autoplay_start`);
+
+          // writeTextToTextarea__debounced();
         }
 
         clearInterval(searchInterval);
@@ -374,14 +376,15 @@ const onChangeStage = function (mutations) {
         settings.stats.time += parseInt((Date.now() - play) / 1000);
       }
 
-      currentTextToWrite = textToWrite.slice()
+      // currentTextToWrite = textToWrite.slice()
 
       const attributeValue = $(mutation.target).prop(mutation.attributeName);
       if (attributeValue.includes("s-search")) {
         if (remoteIP.innerText !== "") remoteIP.innerText = "-";
-        // console.dir("СТАДИЯ ПОИСКА")
+        console.dir("СТАДИЯ ПОИСКА");
         stage = 1;
         // offline.play()
+        $.getJSON(`http://localhost:3300/autoplay_stop`);
 
         clearInterval(tim);
         localStage.innerText = 1;
@@ -393,7 +396,7 @@ const onChangeStage = function (mutations) {
         search = Date.now();
         mySkipSound.play();
       } else if (attributeValue.includes("s-found")) {
-        // console.dir("СТАДИЯ НАШЕЛ")
+        console.dir("СТАДИЯ НАШЕЛ");
 
         // remoteFace.innerHTML = ''
         stage = 2;
@@ -403,7 +406,7 @@ const onChangeStage = function (mutations) {
         if (requestToSkip) stopAndStart();
       } else if (attributeValue.includes("s-play")) {
         // online.play()
-        // console.dir("СТАДИЯ ВОСПРОИЗВЕДЕНИЯ")
+        console.dir("СТАДИЯ ВОСПРОИЗВЕДЕНИЯ");
 
         stage = 3;
         localStage.innerText = 3;
@@ -427,7 +430,8 @@ const onChangeStage = function (mutations) {
       } else if (attributeValue.includes("s-stop")) {
         // offline.play()
         clearInterval(tim);
-        // console.dir("СТАДИЯ СТОП")
+        console.dir("СТАДИЯ СТОП");
+
         if (remoteIP.innerText !== "") remoteIP.innerText = "-";
         remoteFace.innerHTML = "";
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3300;
 const serverUrl = `http://localhost:${port}`;
 
 const commands = {
