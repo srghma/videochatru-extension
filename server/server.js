@@ -172,20 +172,14 @@ function mplayer(reqLogger, mp3File) {
       }
     });
 
-    // childProcess.on("exit", (_code, signal) => {
-    //   reqLogger.info(
-    //     "mplayer exit",
-    //     _code,
-    //     signal,
-    //     state.currentAudioProcess && state.currentAudioProcess.pid,
-    //   );
-    //   if (state.currentAudioProcess === childProcess) {
-    //     state.currentAudioProcess = null;
-    //   }
-    //   if (signal === "SIGTERM") {
-    //     resolve();
-    //   }
-    // });
+    childProcess.on("exit", (code, signal) => {
+      reqLogger.info(
+        `mplayer exit: code: ${code}, signal: ${signal}, pid: ${state.currentAudioProcess?.pid}`,
+      );
+      if (state.currentAudioProcess === childProcess) {
+        state.currentAudioProcess = null;
+      }
+    });
   });
 }
 
@@ -209,7 +203,7 @@ async function playAudio(reqLogger, lineIndex) {
   }
 
   reqLogger.info(`Playing: lineText: ${lineText}, mp3File: ${mp3File}`);
-  await execFile("notify-send", [`${lineIndex}: ${lineText}`]);
+  execFile("notify-send", [`${lineIndex}: ${lineText}`]);
 
   state.lastReadLineIndex = lineIndex;
 
@@ -219,7 +213,7 @@ async function playAudio(reqLogger, lineIndex) {
 const app = express();
 
 const reqIdCounters = {};
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   const path = req.path;
   if (!reqIdCounters[path]) {
     reqIdCounters[path] = 0;
@@ -252,7 +246,8 @@ app.get("/prev", async (req, res) => {
   await playAudio(reqLogger, state.lastReadLineIndex - 1);
 });
 
-app.get("/stop", async (req, res) => {
+app.get("/stop", async (_req, res) => {
+  startAutoplay_debounced.stop();
   if (state.currentAudioProcess) {
     state.currentAudioProcess.kill();
   }
@@ -261,8 +256,8 @@ app.get("/stop", async (req, res) => {
     lastReadLineIndex: state.lastReadLineIndex,
     currentAudioProcess: null,
   };
-  await execFile("notify-send", ["/stop"]);
   res.send("Stopped audio");
+  execFile("notify-send", ["/stop"]);
 });
 
 // Example usage:
@@ -290,7 +285,7 @@ async function startAutoplay(reqLogger) {
       );
       while (state.currentAudioProcess) {
         reqLogger.warn(`state.currentAudioProcess, waiting`);
-        // await new Promise((resolve) => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         if (state.currentAudioProcess) {
           state.currentAudioProcess.kill();
         }
@@ -315,7 +310,7 @@ async function startAutoplay(reqLogger) {
   }
 }
 
-const startAutoplay_debounced = debounce(startAutoplay, 6000);
+const startAutoplay_debounced = debounce(startAutoplay, 3000);
 
 app.get("/autoplay_start", async (req, res) => {
   const reqLogger = req.reqLogger;
@@ -325,6 +320,7 @@ app.get("/autoplay_start", async (req, res) => {
   res.send("Autoplay started");
   startAutoplay_debounced(reqLogger).then(reqLogger.debug).catch(reqLogger.error);
 });
+
 app.get("/autoplay_stop", async (_req, res) => {
   startAutoplay_debounced.stop();
   if (state.currentAudioProcess) {
@@ -335,8 +331,8 @@ app.get("/autoplay_stop", async (_req, res) => {
     lastReadLineIndex: 0,
     currentAudioProcess: null,
   };
-  await execFile("notify-send", ["/autoplay_stop"]);
   res.send("Autoplay stopped");
+  execFile("notify-send", ["/autoplay_stop"]);
 });
 
 app.get("/choose/:line", async (req, res) => {
