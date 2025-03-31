@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "debounce-async": "^0.0.2"
+  }
+}
