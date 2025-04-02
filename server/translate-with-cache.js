@@ -1,4 +1,5 @@
 import translator from "open-google-translator";
+// import translate from "google-translate-free";
 import { open } from "sqlite";
 import sqlite3 from "sqlite3";
 import { execFileSync } from "node:child_process";
@@ -36,12 +37,12 @@ export async function openDB() {
 export async function db__getArrayOfTranslations({
   languageFrom,
   languageTo,
-  strArray,
+  lines,
 }) {
-  if (!strArray.length) return [];
+  if (lines.length <= 0) return [];
 
-  const placeholders = Array(strArray.length).fill("?").join(",");
-  const params = [languageFrom, languageTo, ...strArray];
+  const placeholders = Array(lines.length).fill("?").join(",");
+  const params = [languageFrom, languageTo, ...lines];
 
   const rows = await db.all(
     `SELECT original, translation
@@ -56,6 +57,27 @@ export async function db__getArrayOfTranslations({
     original,
     translation,
   }));
+}
+
+// input { from: "en", to: "km", text: "im in db" }
+// returns "..."
+// input { from: "en", to: "km", text: "im not in db" }
+// returns null
+export async function db__getTranslation({ languageFrom, languageTo, text }) {
+  if (!text) throw new Error("text is required");
+  if (!languageFrom) throw new Error("languageFrom is required");
+  if (!languageTo) throw new Error("languageTo is required");
+
+  const rows = await db.all(
+    `SELECT translation
+     FROM translations
+     WHERE language_from = ?
+     AND language_to = ?
+     AND original = ?`,
+    [languageFrom, languageTo, text],
+  );
+
+  return rows.length > 0 ? rows[0].translation : null;
 }
 
 export async function db__upsertArrayOfTranslations({
@@ -80,30 +102,95 @@ export async function db__upsertArrayOfTranslations({
   );
 }
 
-export async function translateSrt({ strDataArray, languageFrom, languageTo }) {
-  const srtDataText__nonEmpty = strDataArray
-    .map(({ text }) => text.trim())
-    .filter((x) => x);
+export async function translateText({ text, languageFrom, languageTo }) {
+  text = text.trim();
+  if (!text) throw new Error("text is required");
+  if (!languageFrom) throw new Error("languageFrom is required");
+  if (!languageTo) throw new Error("languageTo is required");
 
-  const translationsFromDB = await getTranslationsFromDbIfExist({
+  if (!db) {
+    await openDB();
+  }
+
+  // Array { original: String, translation: String }
+  const translationFromDB = await db__getTranslation({
     languageFrom,
     languageTo,
-    strArray: srtDataText__nonEmpty,
+    text,
   });
 
-  const listOfWordsToTranslate = srtDataText__nonEmpty.filter(
+  if (translationFromDB === text) {
+    throw new Error(
+      `translationFromDB is the same as the original text: ${text}`,
+    );
+  }
+
+  if (translationFromDB) {
+    return translationFromDB;
+  }
+
+  // Array { original: String, translation: String }
+  const { text: fetchedTranslation } = await translate(text, {
+    from: languageFrom,
+    to: languageTo,
+  });
+
+  if (fetchedTranslation === text) {
+    throw new Error(
+      `fetchedTranslation is the same as the original text: ${text}`,
+    );
+  }
+
+  db__upsertArrayOfTranslations({
+    translations: [{ original: text, translation: fetchedTranslation }],
+    languageFrom,
+    languageTo,
+  });
+
+  // fs.writeFileSync(
+  //   path.join(scriptDir, `rofi-audio--${languageTo}.txt`),
+  //   lines
+  //     .map((text) => {
+  //       if (!text.trim()) return text;
+  //       const found = translations.find((t) => t.original === text);
+  //       return found ? found.translation : text;
+  //     })
+  //     .join("\n"),
+  // );
+
+  return fetchedTranslation;
+}
+
+export async function translateLines({ lines, languageFrom, languageTo }) {
+  if (!db) {
+    await openDB();
+  }
+
+  console.log({
+    languageFrom,
+    languageTo,
+  });
+
+  // Array { original: String, translation: String }
+  const translationsFromDB = await db__getArrayOfTranslations({
+    languageFrom,
+    languageTo,
+    lines,
+  });
+
+  const listOfWordsToTranslate = lines.filter(
     (text) => !translationsFromDB.find((t) => t.original === text),
   );
 
   if (
     listOfWordsToTranslate.length + translationsFromDB.length !==
-    srtDataText__nonEmpty.length
+    lines.length
   ) {
     throw new Error(
       `not all words are translated,
       listOfWordsToTranslate.length (${listOfWordsToTranslate.length}) + translationsFromDB.length (${translationsFromDB.length})
       === ${listOfWordsToTranslate.length + translationsFromDB.length}
-      !== srtDataText__nonEmpty.length (${srtDataText__nonEmpty.length})`,
+      !== lines.length (${lines.length})`,
     );
   }
 
@@ -113,20 +200,40 @@ export async function translateSrt({ strDataArray, languageFrom, languageTo }) {
     console.log(
       `requesting google translations ${listOfWordsToTranslate.length}`,
     );
+    // console.log({
+    //   listOfWordsToTranslate: listOfWordsToTranslate.slice(0, 1),
+    //   languageFrom,
+    //   languageTo,
+    // });
+
+    if (languageFrom === languageTo) {
+      throw new Error(
+        `fromLanguage === toLanguage: ${fromLanguage} === ${toLanguage}`,
+      );
+    }
+
+    // Array { original: String, translation: String }
     fetchedTranslations = await translator.TranslateLanguageData({
-      listOfWordsToTranslate,
-      languageFrom,
-      languageTo,
+      listOfWordsToTranslate: listOfWordsToTranslate,
+      fromLanguage: languageFrom,
+      toLanguage: languageTo,
     });
+
+    fetchedTranslations = fetchedTranslations.map(
+      ({ original, translation }) => ({
+        original: original.trim(),
+        translation: translation.trim(),
+      }),
+    );
   }
 
   const invalidTranslations = fetchedTranslations.filter(
-    (x) => !x.translation.trim(),
+    (x) => !x.translation || x.translation === x.original,
   );
 
   if (invalidTranslations.length > 0) {
     throw new Error(
-      `no translation for ${invalidTranslations.map((x) => x.original)}`,
+      `no translation for ${invalidTranslations.map((x) => x.original).join("\n | \n")}`,
     );
   }
 
@@ -136,28 +243,37 @@ export async function translateSrt({ strDataArray, languageFrom, languageTo }) {
     languageTo,
   });
 
-  console.log({ fetchedTranslations, translationsFromDB });
+  // console.log({ fetchedTranslations, translationsFromDB });
 
   const translations = [...fetchedTranslations, ...translationsFromDB];
+  const translationsInCorrectOrder = lines.map((text) => {
+    const found = translations.find((t) => t.original === text);
+    if (!found) throw new Error(`translation not found for ${text}`);
+    return found;
+  });
 
   fs.writeFileSync(
     path.join(scriptDir, `rofi-audio--${languageTo}.txt`),
-    strDataArray
-      .map(({ text }) => {
-        if (!text.trim()) return text;
-        const found = translations.find((t) => t.original === text);
-        return found ? found.translation : text;
-      })
-      .join("\n"),
+    translationsInCorrectOrder.map((x) => x.translation).join("\n"),
   );
 
-  const output = strDataArray.map((strData) => {
-    const { text } = strData;
-    if (!text.trim()) {
-      return { ...strData, translation: text };
-    }
-    const found = translations.find((t) => t.original === text);
-    return { ...strData, translation: found ? found.translation : text };
-  });
-  return output;
+  console.log("translationsInCorrectOrder", translationsInCorrectOrder);
+  return translationsInCorrectOrder;
 }
+
+// async function main() {
+//   const lines = loadLinesFromTxtFile();
+//   let translationsBuffer = [];
+//   for (const text of lines) {
+//     translationsBuffer.push(
+//       await translateText({ text, languageFrom: "ru", languageTo: "en" }),
+//     );
+//   }
+
+//   fs.writeFileSync(
+//     path.join(scriptDir, `rofi-audio--${languageTo}.txt`),
+//     translationsBuffer.map((text) => text.trim()).join("\n"),
+//   );
+// }
+
+// main();

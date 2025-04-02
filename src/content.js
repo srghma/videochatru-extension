@@ -235,18 +235,16 @@ const onUpdateIP = function (mutations) {
         const country = countryElement.dataset.tr;
         console.log("country", country);
 
-        if (country !== "RU") {
-          stopAndStart();
-          console.log("not ru, skip", country);
-        } else {
-          targetSound.play();
-
-          $.getJSON(
-            `http://localhost:3300/autoplay_start?waitMilliseconds=2000`,
-          );
-
-          // writeTextToTextarea__debounced();
-        }
+        // if (country !== "RU") {
+        //   stopAndStart();
+        //   console.log("not ru, skip", country);
+        // } else {
+        targetSound.play();
+        $.getJSON(
+          `http://localhost:3300/autoplay_start?waitMilliseconds=2000&country=${country.toLowerCase()}`,
+        );
+        // writeTextToTextarea__debounced();
+        // }
 
         clearInterval(searchInterval);
       }

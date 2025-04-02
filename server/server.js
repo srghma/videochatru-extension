@@ -15,14 +15,19 @@ const execFile = util.promisify(execFileCallback);
 import morgan from "morgan";
 import winston from "winston";
 import debounce from "./debounce-async.js";
-import { showRofiDialog, getElemOfNonEmptyArray, loadOptions } from "./utils.js"
-import { translateSrt } from "./translate-with-cache.js"
+import {
+  showRofiDialog,
+  getElemOfNonEmptyArray,
+  loadLinesFromTxtFile,
+} from "./utils.js";
+import { translateLines } from "./translate-with-cache.js";
+import * as CountryLanguage from "@ladjs/country-language";
 
-function main() {
-  const lines = loadOptions();
-  translateSrt({ strDataArray: lines, languageFrom: 'ru', languageTo: 'en' });
-}
-main()
+// function main() {
+//   const lines = loadLinesFromTxtFile();
+//   translateLines({ lines, languageFrom: "ru", languageTo: "en" });
+// }
+// main();
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || "info",
@@ -40,15 +45,12 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-
-
-
 function notifySend(text) {
-  // execFile("notify-send", [text]);
+  execFile("notify-send", [text]);
 }
 
-function getlineIndex(index) {
-  const lines = loadOptions();
+function getlineIndex(index, language) {
+  const lines = loadLinesFromTxtFile(language);
   return getElemOfNonEmptyArray(lines, index);
 }
 
@@ -121,12 +123,12 @@ function mplayer(reqLogger, mp3File) {
   });
 }
 
-async function playAudio(reqLogger, lineIndex) {
+async function playAudio(reqLogger, lineIndex, language) {
   reqLogger.info(`playAudio called with lineIndex: ${lineIndex}`);
   if (!Number.isInteger(lineIndex)) {
     throw new Error(`No line index ${lineIndex}`);
   }
-  const lineText = getlineIndex(lineIndex);
+  const lineText = getlineIndex(lineIndex, language);
   if (!lineText) {
     throw new Error(`No text found for line number ${lineIndex}`);
   }
@@ -137,7 +139,17 @@ async function playAudio(reqLogger, lineIndex) {
     await fs.promises.access(mp3File);
   } catch {
     reqLogger.info("MP3 file does not exist, generating...", mp3File);
-    await execFile("gtts-cli", [lineText, "-l", "ru", "-o", mp3File]);
+    if (language === "fa") {
+      language = "ar";
+    }
+
+    const disableCheck = language === "uz";
+    await execFile(
+      "gtts-cli",
+      [lineText, "-l", language, "-o", mp3File].concat(
+        disableCheck ? ["--nocheck"] : [],
+      ),
+    );
   }
 
   reqLogger.info(`Playing: lineText: ${lineText}, mp3File: ${mp3File}`);
@@ -156,8 +168,11 @@ app.use((req, _res, next) => {
   if (!reqIdCounters[path]) {
     reqIdCounters[path] = 0;
   }
-  req.reqLogger = logger.child({ path, requestId: reqIdCounters[path]++ });
-  req.reqLogger.warn(req.path);
+  req.reqLogger = logger.child({
+    path,
+    requestId: reqIdCounters[path]++,
+  });
+  req.reqLogger.warn(`${req.path} ${JSON.stringify(req.query)}`);
   next();
 });
 
@@ -173,15 +188,15 @@ const morganMiddleware = morgan(
 app.use(morganMiddleware);
 
 app.get("/next", async (req, res) => {
-  const reqLogger = req.reqLogger;
+  const { reqLogger } = req;
   res.send("Playing next line");
-  await playAudio(reqLogger, state.lastReadLineIndex + 1);
+  await playAudio(reqLogger, state.lastReadLineIndex + 1, state.lastLanguage);
 });
 
 app.get("/prev", async (req, res) => {
-  const reqLogger = req.reqLogger;
+  const { reqLogger } = req;
   res.send("Playing previous line");
-  await playAudio(reqLogger, state.lastReadLineIndex - 1);
+  await playAudio(reqLogger, state.lastReadLineIndex - 1, state.lastLanguage);
 });
 
 app.get("/stop", async (_req, res) => {
@@ -199,7 +214,7 @@ app.get("/stop", async (_req, res) => {
 });
 
 // Example usage:
-async function startAutoplay(reqLogger) {
+async function startAutoplay(reqLogger, language) {
   try {
     if (state.currentAudioProcess) {
       state.currentAudioProcess.kill();
@@ -207,6 +222,7 @@ async function startAutoplay(reqLogger) {
     state = {
       autoplaying: true,
       lastReadLineIndex: 0,
+      lastLanguage: language,
       currentAudioProcess: null,
     };
     while (state.autoplaying) {
@@ -217,7 +233,7 @@ async function startAutoplay(reqLogger) {
       reqLogger.info(
         `autoplaying_start while 2, autoplaying: ${state.autoplaying}, pid: ${state.currentAudioProcess && state.currentAudioProcess.pid}`,
       );
-      await playAudio(reqLogger, state.lastReadLineIndex);
+      await playAudio(reqLogger, state.lastReadLineIndex, state.lastLanguage);
       reqLogger.info(
         `autoplaying_start while 3, autoplaying: ${state.autoplaying}, pid: ${state.currentAudioProcess && state.currentAudioProcess.pid}`,
       );
@@ -231,7 +247,7 @@ async function startAutoplay(reqLogger) {
       if (state.currentAudioProcess) {
         throw new Error("audio process still running");
       }
-      // await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       reqLogger.info(
         `autoplaying_start while 4, autoplaying: ${state.autoplaying}, pid: ${state.currentAudioProcess && state.currentAudioProcess.pid}`,
       );
@@ -250,13 +266,46 @@ async function startAutoplay(reqLogger) {
 
 const startAutoplay_debounced = debounce(startAutoplay, 3000);
 
+function countryIsoToLanguageIso(country) {
+  return new Promise((resolve, reject) => {
+    CountryLanguage.getCountryLanguages(country, (err, languages) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(languages[0].iso639_1);
+      }
+    });
+  });
+}
+
 app.get("/autoplay_start", async (req, res) => {
-  const reqLogger = req.reqLogger;
+  const { reqLogger } = req;
+  console.log(req.query);
+  const { country } = req.query;
   if (state.autoplaying) {
     return res.send("Autoplay already started");
   }
-  res.send("Autoplay started");
-  startAutoplay_debounced(reqLogger).then(reqLogger.debug).catch(reqLogger.error);
+
+  const language = await countryIsoToLanguageIso(country);
+
+  res.send(`Autoplay started for country ${country} language ${language}`);
+
+  state.lastLanguage = language
+
+  if (language == "ru" || language == "en") {
+    // do nothing
+  } else {
+    const lines = loadLinesFromTxtFile("en");
+    await translateLines({
+      lines,
+      languageFrom: "en",
+      languageTo: language,
+    });
+  }
+
+  startAutoplay_debounced(reqLogger, language)
+    .then(reqLogger.debug)
+    .catch(reqLogger.error);
 });
 
 app.get("/autoplay_stop", async (_req, res) => {
@@ -267,6 +316,7 @@ app.get("/autoplay_stop", async (_req, res) => {
   state = {
     autoplaying: false,
     lastReadLineIndex: 0,
+    lastLanguage: state.lastLanguage,
     currentAudioProcess: null,
   };
   res.send("Autoplay stopped");
@@ -274,15 +324,16 @@ app.get("/autoplay_stop", async (_req, res) => {
 });
 
 app.get("/choose/:line", async (req, res) => {
-  const reqLogger = req.reqLogger;
+  const { reqLogger } = req;
   const lineNumber = parseInt(req.params.line, 10);
-  await playAudio(reqLogger, lineNumber - 1);
+  await playAudio(reqLogger, lineNumber - 1, state.lastLanguage);
   res.send(`Playing chosen line ${lineNumber}`);
 });
 
 app.get("/rofi", async (req, res) => {
-  const reqLogger = req.reqLogger;
-  const lineIndex = await showRofiDialog(reqLogger);
+  const { reqLogger } = req;
+  const lineIndex = await showRofiDialog(reqLogger, state.lastLanguage);
+  // const { country } = req.query;
   if (!lineIndex) {
     res.send(`Rofi: no selection`);
     return;
@@ -292,8 +343,13 @@ app.get("/rofi", async (req, res) => {
     state.currentAudioProcess.kill();
   }
   res.send(`Rofi: selected ${lineIndex}`);
-  await playAudio(reqLogger, lineIndex);
+  // const language = await countryIsoToLanguageIso(country);
+  await playAudio(reqLogger, lineIndex, state.lastLanguage);
 });
 
 const port = process.env.PORT || 3300;
 app.listen(port, () => logger.info(`Server running on port ${port}`));
+
+// process.on("unhandledRejection", (reason, promise) => {
+//   console.error("Unhandled Promise Rejection:", reason, promise);
+// });

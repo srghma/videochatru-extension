@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+
 import path from "node:path";
 
 import { fileURLToPath } from "url";
@@ -7,14 +8,15 @@ import { dirname } from "path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const scriptDir = __dirname;
-const optionsFile = path.join(scriptDir, "rofi-audio.txt");
 
-export function loadOptions() {
+export function loadLinesFromTxtFile(language) {
+  const optionsFile = path.join(__dirname, `rofi-audio--${language}.txt`);
+  console.log("optionsFile", optionsFile);
+
   const lines = fs
     .readFileSync(optionsFile, "utf-8")
     .split("\n")
-    .map((line) => line.split("#")[0].trim()) // Remove comments
+    .map((line) => line.split(" -- ")[0].trim()) // Remove comments
     .filter((line) => line.length > 0); // Remove empty lines
 
   if (!lines.length) throw Error("no lines loaded");
@@ -77,9 +79,9 @@ export function getElemOfNonEmptyArray(array, index) {
   return array[rotateIndex(length - 1, index)];
 }
 
-async function showRofiDialog_(reqLogger) {
+async function showRofiDialog_(reqLogger, language) {
   try {
-    const inputText = loadOptions()
+    const inputText = loadLinesFromTxtFile(language)
       .map((line, index) => `${index + 1}: ${line}`)
       .join("\n");
     return execFileSync("rofi", ["-dmenu", "-p", "Play"], {
@@ -95,8 +97,8 @@ async function showRofiDialog_(reqLogger) {
   }
 }
 
-export async function showRofiDialog(reqLogger) {
-  const stdout = await showRofiDialog_(reqLogger);
+export async function showRofiDialog(reqLogger, language) {
+  const stdout = await showRofiDialog_(reqLogger, language);
   if (!stdout) {
     return null;
   }
