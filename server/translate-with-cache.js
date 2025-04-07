@@ -262,7 +262,7 @@ export async function translateLines({ lines, languageFrom, languageTo }) {
 }
 
 // async function main() {
-//   const lines = loadLinesFromTxtFile();
+//   const lines = txtFile__loadLines();
 //   let translationsBuffer = [];
 //   for (const text of lines) {
 //     translationsBuffer.push(

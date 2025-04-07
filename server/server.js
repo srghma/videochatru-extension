@@ -18,13 +18,16 @@ import debounce from "./debounce-async.js";
 import {
   showRofiDialog,
   getElemOfNonEmptyArray,
-  loadLinesFromTxtFile,
+  txtFile__loadLines,
+  txtFile__doesExist,
 } from "./utils.js";
 import { translateLines } from "./translate-with-cache.js";
 import * as CountryLanguage from "@ladjs/country-language";
 
+const port = process.env.PORT || 3300;
+
 // function main() {
-//   const lines = loadLinesFromTxtFile();
+//   const lines = txtFile__loadLines();
 //   translateLines({ lines, languageFrom: "ru", languageTo: "en" });
 // }
 // main();
@@ -46,11 +49,13 @@ const logger = winston.createLogger({
 });
 
 function notifySend(text) {
-  execFile("notify-send", [text]);
+  const u = { 3300: "normal", 3301: "low", 3302: "critical" }[port];
+  if (!u) throw new Error(`Invalid urgency level for port ${port}`);
+  execFile("notify-send", ["-u", u, "-c", `chat${port - 3299}`, text]);
 }
 
-function getlineIndex(index, language) {
-  const lines = loadLinesFromTxtFile(language);
+function txtFile__getLineByIndex(index, language) {
+  const lines = txtFile__loadLines(language);
   return getElemOfNonEmptyArray(lines, index);
 }
 
@@ -65,24 +70,43 @@ const generateMp3Path = (lineText) => {
   return path.join(process.env.HOME, "Documents/rofi-audio", `${hash}.mp3`);
 };
 
-function mplayer(reqLogger, mp3File) {
+function mplayer(reqLogger, mp3File, language) {
   if (state.currentAudioProcess) {
     reqLogger.info("Killing existing mplayer process");
     state.currentAudioProcess.kill();
   }
 
   return new Promise(function (resolve, reject) {
-    const program = "mplayer";
-    const opts = [
-      "-speed",
-      "1.4",
-      "-af",
-      "scaletempo",
-      "-volume",
-      "40",
-      mp3File,
-    ];
-    reqLogger.info([program, ...opts].join(" "));
+    const speedUp = language === "ru" || language === "km";
+    const programAndOpts = {
+      3300: [
+        "mplayer",
+        "-speed",
+        speedUp ? "1.4" : "1.1",
+        "-af",
+        "scaletempo",
+        "-volume",
+        "30",
+        mp3File,
+      ],
+      3301: [
+        "ffplay",
+        "-nodisp",
+        "-autoexit",
+        "-volume",
+        "30",
+        "-af",
+        `atempo=${speedUp ? "1.4" : "1.1"}`,
+        mp3File,
+      ],
+      3302: ["audacious", mp3File],
+    }[port];
+
+    if (!programAndOpts) throw new Error(`Invalid port ${port}`);
+
+    const [program, ...opts] = programAndOpts;
+    reqLogger.info(programAndOpts.join(" "));
+
     const childProcess = spawn(program, opts, {
       stdio: ["ignore", "ignore", "ignore"],
     });
@@ -90,7 +114,7 @@ function mplayer(reqLogger, mp3File) {
 
     childProcess.on("error", (err) => {
       reqLogger.error(
-        `mplayer error: ${err}, pid: ${state.currentAudioProcess?.pid}`,
+        `${program} error: ${err}, pid: ${state.currentAudioProcess?.pid}`,
       );
       if (state.currentAudioProcess === childProcess) {
         state.currentAudioProcess = null;
@@ -100,12 +124,12 @@ function mplayer(reqLogger, mp3File) {
 
     childProcess.on("close", (code) => {
       reqLogger.info(
-        `mplayer close: code ${code}, pid: ${state.currentAudioProcess?.pid}`,
+        `${program} close: code ${code}, pid: ${state.currentAudioProcess?.pid}`,
       );
       if (state.currentAudioProcess === childProcess) {
         state.currentAudioProcess = null;
       }
-      if (code === 0 || code === null || code === 1) {
+      if (code === 0 || code === null || code === 1 || code === 123) {
         resolve();
       } else {
         reject(new Error(`Process exited with code ${code}`));
@@ -114,7 +138,7 @@ function mplayer(reqLogger, mp3File) {
 
     childProcess.on("exit", (code, signal) => {
       reqLogger.info(
-        `mplayer exit: code: ${code}, signal: ${signal}, pid: ${state.currentAudioProcess?.pid}`,
+        `${program} exit: code: ${code}, signal: ${signal}, pid: ${state.currentAudioProcess?.pid}`,
       );
       if (state.currentAudioProcess === childProcess) {
         state.currentAudioProcess = null;
@@ -128,7 +152,7 @@ async function playAudio(reqLogger, lineIndex, language) {
   if (!Number.isInteger(lineIndex)) {
     throw new Error(`No line index ${lineIndex}`);
   }
-  const lineText = getlineIndex(lineIndex, language);
+  const lineText = txtFile__getLineByIndex(lineIndex, language);
   if (!lineText) {
     throw new Error(`No text found for line number ${lineIndex}`);
   }
@@ -139,11 +163,7 @@ async function playAudio(reqLogger, lineIndex, language) {
     await fs.promises.access(mp3File);
   } catch {
     reqLogger.info("MP3 file does not exist, generating...", mp3File);
-    if (language === "fa") {
-      language = "ar";
-    }
-
-    const disableCheck = language === "uz";
+    const disableCheck = language === "uz"; // bc exists but not added
     await execFile(
       "gtts-cli",
       [lineText, "-l", language, "-o", mp3File].concat(
@@ -157,7 +177,7 @@ async function playAudio(reqLogger, lineIndex, language) {
 
   state.lastReadLineIndex = lineIndex;
 
-  return mplayer(reqLogger, mp3File);
+  return mplayer(reqLogger, mp3File, language);
 }
 
 const app = express();
@@ -272,7 +292,14 @@ function countryIsoToLanguageIso(country) {
       if (err) {
         reject(err);
       } else {
-        resolve(languages[0].iso639_1);
+        let language = languages[0].iso639_1;
+        if (language === "ky") language = "ru";
+        if (language === "uz") language = "ru";
+        if (language === "fa") language = "ar";
+        if (language === "hy") language = "ru";
+        if (language === "az") language = "ru";
+        if (language === "mk") language = "en";
+        resolve(language);
       }
     });
   });
@@ -290,12 +317,10 @@ app.get("/autoplay_start", async (req, res) => {
 
   res.send(`Autoplay started for country ${country} language ${language}`);
 
-  state.lastLanguage = language
-
   if (language == "ru" || language == "en") {
     // do nothing
   } else {
-    const lines = loadLinesFromTxtFile("en");
+    const lines = txtFile__loadLines("en");
     await translateLines({
       lines,
       languageFrom: "en",
@@ -332,10 +357,14 @@ app.get("/choose/:line", async (req, res) => {
 
 app.get("/rofi", async (req, res) => {
   const { reqLogger } = req;
-  const lineIndex = await showRofiDialog(reqLogger, state.lastLanguage);
-  // const { country } = req.query;
-  if (!lineIndex) {
+  const { country } = req.query;
+  const language = country
+    ? await countryIsoToLanguageIso(country)
+    : state.lastLanguage || "ru";
+  const lineIndex = await showRofiDialog(reqLogger, language);
+  if (!Number.isInteger(lineIndex)) {
     res.send(`Rofi: no selection`);
+    reqLogger.error(`Rofi: no selection`);
     return;
   }
   reqLogger.info(`lineIndex ${lineIndex}`);
@@ -343,11 +372,9 @@ app.get("/rofi", async (req, res) => {
     state.currentAudioProcess.kill();
   }
   res.send(`Rofi: selected ${lineIndex}`);
-  // const language = await countryIsoToLanguageIso(country);
-  await playAudio(reqLogger, lineIndex, state.lastLanguage);
+  await playAudio(reqLogger, lineIndex, language);
 });
 
-const port = process.env.PORT || 3300;
 app.listen(port, () => logger.info(`Server running on port ${port}`));
 
 // process.on("unhandledRejection", (reason, promise) => {

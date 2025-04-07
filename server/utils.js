@@ -9,8 +9,16 @@ import { dirname } from "path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export function loadLinesFromTxtFile(language) {
-  const optionsFile = path.join(__dirname, `rofi-audio--${language}.txt`);
+export function txtFile__getPath(language) {
+  return path.join(__dirname, `rofi-audio--${language}.txt`)
+}
+
+export function txtFile__doesExist(language) {
+  return fs.existsSync(txtFile__getPath(language))
+}
+
+export function txtFile__loadLines(language) {
+  const optionsFile = txtFile__getPath(language);
   console.log("optionsFile", optionsFile);
 
   const lines = fs
@@ -81,7 +89,7 @@ export function getElemOfNonEmptyArray(array, index) {
 
 async function showRofiDialog_(reqLogger, language) {
   try {
-    const inputText = loadLinesFromTxtFile(language)
+    const inputText = txtFile__loadLines(language)
       .map((line, index) => `${index + 1}: ${line}`)
       .join("\n");
     return execFileSync("rofi", ["-dmenu", "-p", "Play"], {
@@ -99,13 +107,19 @@ async function showRofiDialog_(reqLogger, language) {
 
 export async function showRofiDialog(reqLogger, language) {
   const stdout = await showRofiDialog_(reqLogger, language);
+  // console.log('stdout', stdout)
   if (!stdout) {
     return null;
   }
   const chosen = stdout.trim();
+  // console.log('chosen', chosen)
   if (!chosen) {
     return null;
   }
+  // console.log('chosen.split(":")', chosen.split(":"))
   const lineIndexString = chosen.split(":")[0].trim();
-  return parseInt(lineIndexString, 10) - 1;
+  // console.log('lineIndexString', lineIndexString)
+  const lineIndex = parseInt(lineIndexString, 10) - 1;
+  // console.log('lineIndex', lineIndex)
+  return lineIndex
 }

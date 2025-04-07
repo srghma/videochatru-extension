@@ -1,3 +1,5 @@
+const musicPlayerServerHost = "http://localhost:3300"
+
 let settings = {},
   local = { ips: [] },
   stage = 0,
@@ -208,6 +210,8 @@ function debounce(func, wait) {
 
 const writeTextToTextarea__debounced = debounce(writeTextToTextarea, 3000);
 
+const sessionId = crypto.randomUUID(); // or generateRandomId()
+
 let searchInterval = null;
 const onUpdateIP = function (mutations) {
   if (remoteIP.innerText === "-" || remoteIP.innerText === "") return;
@@ -235,16 +239,16 @@ const onUpdateIP = function (mutations) {
         const country = countryElement.dataset.tr;
         console.log("country", country);
 
-        // if (country !== "RU") {
-        //   stopAndStart();
-        //   console.log("not ru, skip", country);
-        // } else {
-        targetSound.play();
-        $.getJSON(
-          `http://localhost:3300/autoplay_start?waitMilliseconds=2000&country=${country.toLowerCase()}`,
-        );
-        // writeTextToTextarea__debounced();
-        // }
+        if (country !== "RU") {
+          stopAndStart();
+          console.log("not ru, skip", country);
+        } else {
+          targetSound.play();
+          $.getJSON(
+            `${musicPlayerServerHost}/autoplay_start?waitMilliseconds=2000&country=${country.toLowerCase()}&sessionId=${sessionId}`,
+          );
+          // writeTextToTextarea__debounced();
+        }
 
         clearInterval(searchInterval);
       }
@@ -384,7 +388,7 @@ const onChangeStage = function (mutations) {
         console.dir("СТАДИЯ ПОИСКА");
         stage = 1;
         // offline.play()
-        $.getJSON(`http://localhost:3300/autoplay_stop`);
+        $.getJSON(`${musicPlayerServerHost}/autoplay_stop?sessionId=${sessionId}`);
 
         clearInterval(tim);
         localStage.innerText = 1;
