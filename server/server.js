@@ -49,9 +49,18 @@ const logger = winston.createLogger({
 });
 
 function notifySend(text) {
-  const u = { 3300: "normal", 3301: "low", 3302: "critical" }[port];
+  return
+  const u = { 3300: "normal", 3301: "low", 3302: "low" }[port];
   if (!u) throw new Error(`Invalid urgency level for port ${port}`);
-  execFile("notify-send", ["-u", u, "-c", `chat${port - 3299}`, text]);
+  execFile("notify-send", [
+    // "-u",
+    // u,
+    "-c",
+    `chat${port - 3299}`,
+    "-a",
+    `chat${port - 3299}`,
+    text
+  ]);
 }
 
 function txtFile__getLineByIndex(index, language) {
@@ -99,7 +108,13 @@ function mplayer(reqLogger, mp3File, language) {
         `atempo=${speedUp ? "1.4" : "1.1"}`,
         mp3File,
       ],
-      3302: ["audacious", mp3File],
+      3302: [
+        "audacious",
+        "-2",
+        "-q",
+        "--headless",
+        mp3File
+      ],
     }[port];
 
     if (!programAndOpts) throw new Error(`Invalid port ${port}`);
