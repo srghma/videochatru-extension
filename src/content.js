@@ -1,4 +1,5 @@
 const musicPlayerServerHost = "http://localhost:3300"
+const myPlaySound = false
 
 let settings = {},
   local = { ips: [] },
@@ -243,7 +244,9 @@ const onUpdateIP = function (mutations) {
           stopAndStart();
           console.log("not ru, skip", country);
         } else {
-          targetSound.play();
+          if (myPlaySound) {
+            targetSound.play();
+          }
           $.getJSON(
             `${musicPlayerServerHost}/autoplay_start?waitMilliseconds=2000&country=${country.toLowerCase()}&sessionId=${sessionId}`,
           );
@@ -398,7 +401,9 @@ const onChangeStage = function (mutations) {
         }
 
         search = Date.now();
-        mySkipSound.play();
+        if (myPlaySound) {
+          mySkipSound.play();
+        }
       } else if (attributeValue.includes("s-found")) {
         console.dir("СТАДИЯ НАШЕЛ");
 
