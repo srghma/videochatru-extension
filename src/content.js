@@ -1,4 +1,5 @@
-const musicPlayerServerHost = "http://localhost:3300"
+const getPort = () => localStorage.getItem('musicPlayerPort') || '3300';
+const musicPlayerServerHost = () => `http://localhost:${getPort()}`;
 const myPlaySound = false
 
 let settings = {},
@@ -247,9 +248,7 @@ const onUpdateIP = function (mutations) {
           if (myPlaySound) {
             targetSound.play();
           }
-          $.getJSON(
-            `${musicPlayerServerHost}/autoplay_start?waitMilliseconds=2000&country=${country.toLowerCase()}&sessionId=${sessionId}`,
-          );
+          $.getJSON(`${musicPlayerServerHost()}/autoplay_start?waitMilliseconds=2000&country=${country.toLowerCase()}&sessionId=${sessionId}`);
           // writeTextToTextarea__debounced();
         }
 
@@ -391,7 +390,7 @@ const onChangeStage = function (mutations) {
         console.dir("СТАДИЯ ПОИСКА");
         stage = 1;
         // offline.play()
-        $.getJSON(`${musicPlayerServerHost}/autoplay_stop?sessionId=${sessionId}`);
+        $.getJSON(`${musicPlayerServerHost()}/autoplay_stop?sessionId=${sessionId}`);
 
         clearInterval(tim);
         localStage.innerText = 1;

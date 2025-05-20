@@ -3,12 +3,14 @@
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
+import cors from 'cors'
 import crypto from "node:crypto";
 import util from "node:util";
 import {
   spawn,
   exec as execCallback,
   execFile as execFileCallback,
+  execSync,
 } from "node:child_process";
 const exec = util.promisify(execCallback);
 const execFile = util.promisify(execFileCallback);
@@ -25,6 +27,59 @@ import { translateLines } from "./translate-with-cache.js";
 import * as CountryLanguage from "@ladjs/country-language";
 
 const port = process.env.PORT || 3300;
+
+function isProgramAvailable(program) {
+  try {
+    execSync(`command -v ${program}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const playerByPort = {
+  3300: {
+    program: "mplayer",
+    args: (mp3File, speedUp) => [
+      "-speed", speedUp ? "1.6" : "1.1",
+      "-af", "scaletempo",
+      "-volume", "30",
+      mp3File
+    ],
+  },
+  3301: {
+    program: "ffplay",
+    args: (mp3File, speedUp) => [
+      "-nodisp", "-autoexit",
+      "-volume", "30",
+      "-af", `atempo=${speedUp ? "1.6" : "1.1"}`,
+      mp3File
+    ],
+  },
+  3302: {
+    program: "audacious",
+    args: (mp3File) => ["-2", "-q", "--headless", mp3File],
+  },
+  3303: {
+    program: "mpv",
+    args: (mp3File, speedUp) => [
+      "--no-video",
+      "--volume=30",
+      `--speed=${speedUp ? "1.6" : "1.1"}`,
+      mp3File
+    ],
+  },
+};
+
+for (const [p, config] of Object.entries(playerByPort)) {
+  if (isProgramAvailable(config.program)) {
+  } else {
+    throw new Error(`Audio player not found for port ${p}: ${config.program}`);
+  }
+}
+
+const programAndOpts = playerByPort[port];
+if (!programAndOpts) throw new Error(`Invalid port ${port}`);
 
 // function main() {
 //   const lines = txtFile__loadLines();
@@ -87,42 +142,11 @@ function mplayer(reqLogger, mp3File, language) {
 
   return new Promise(function (resolve, reject) {
     const speedUp = language === "ru" || language === "km";
-    const programAndOpts = {
-      3300: [
-        "mplayer",
-        "-speed",
-        speedUp ? "1.4" : "1.1",
-        "-af",
-        "scaletempo",
-        "-volume",
-        "30",
-        mp3File,
-      ],
-      3301: [
-        "ffplay",
-        "-nodisp",
-        "-autoexit",
-        "-volume",
-        "30",
-        "-af",
-        `atempo=${speedUp ? "1.4" : "1.1"}`,
-        mp3File,
-      ],
-      3302: [
-        "audacious",
-        "-2",
-        "-q",
-        "--headless",
-        mp3File
-      ],
-    }[port];
 
-    if (!programAndOpts) throw new Error(`Invalid port ${port}`);
+    const args = programAndOpts.args(mp3File, speedUp);
+    const program = programAndOpts.program;
 
-    const [program, ...opts] = programAndOpts;
-    reqLogger.info(programAndOpts.join(" "));
-
-    const childProcess = spawn(program, opts, {
+    const childProcess = spawn(program, args, {
       stdio: ["ignore", "ignore", "ignore"],
     });
     state.currentAudioProcess = childProcess;
@@ -196,6 +220,8 @@ async function playAudio(reqLogger, lineIndex, language) {
 }
 
 const app = express();
+
+app.use(cors()); // allows any origin
 
 const reqIdCounters = {};
 app.use((req, _res, next) => {
@@ -291,6 +317,12 @@ async function startAutoplay(reqLogger, language) {
         `autoplaying_start while 5, autoplaying: ${state.autoplaying}, pid: ${state.currentAudioProcess && state.currentAudioProcess.pid}`,
       );
       state.lastReadLineIndex = state.lastReadLineIndex + 1;
+
+      if (state.lastReadLineIndex >= txtFile__loadLines(language).length) {
+        reqLogger.info("Reached end of file. Stopping autoplay.");
+        state.autoplaying = false;
+        break;
+      }
     }
   } catch (error) {
     reqLogger.error("Error in autoplay:", error);
@@ -366,8 +398,19 @@ app.get("/autoplay_stop", async (_req, res) => {
 app.get("/choose/:line", async (req, res) => {
   const { reqLogger } = req;
   const lineNumber = parseInt(req.params.line, 10);
-  await playAudio(reqLogger, lineNumber - 1, state.lastLanguage);
+  await playAudio(reqLogger, lineNumber - 1, state.lastLanguage || 'ru');
   res.send(`Playing chosen line ${lineNumber}`);
+});
+
+app.get("/refresh_list", async (req, res) => {
+  const { reqLogger } = req;
+  const { country } = req.query;
+  const language = country
+    ? await countryIsoToLanguageIso(country)
+    : state.lastLanguage || "ru";
+  const lines = txtFile__loadLines(language);
+  reqLogger.info(`Sending ${lines.length} lines`);
+  res.send(lines);
 });
 
 app.get("/rofi", async (req, res) => {

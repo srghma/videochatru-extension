@@ -24,8 +24,15 @@ function createElement(tagName = '', options = {}, childs = []) {
 
     toObject(options, element)
 
-    for (let child of childs)
-        element.appendChild(child)
+    for (let child of childs) {
+        if (typeof child === 'string' || typeof child === 'number') {
+            element.appendChild(document.createTextNode(child))
+        } else if (child instanceof Node) {
+            element.appendChild(child)
+        } else {
+            console.warn('Ignored non-node child:', child)
+        }
+    }
 
     if (typeof options.ref == 'function')
         options.ref(element)
@@ -77,4 +84,3 @@ function secondsToTime(secs) {
 
     return hours + ":" + minutes + ":" + seconds;
 }
-
