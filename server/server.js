@@ -25,6 +25,11 @@ import {
 } from "./utils.js";
 import { translateLines } from "./translate-with-cache.js";
 import * as CountryLanguage from "@ladjs/country-language";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const port = process.env.PORT || 3300;
 
@@ -41,18 +46,18 @@ const playerByPort = {
   3300: {
     program: "mplayer",
     args: (mp3File, speedUp) => [
-      "-speed", speedUp ? "1.6" : "1.1",
+      "-speed", speedUp ? "1.4" : "1.1",
       "-af", "scaletempo",
       "-volume", "30",
       mp3File
     ],
   },
   3301: {
-    program: "ffplay",
+    program: "mpv",
     args: (mp3File, speedUp) => [
-      "-nodisp", "-autoexit",
-      "-volume", "30",
-      "-af", `atempo=${speedUp ? "1.6" : "1.1"}`,
+      "--no-video",
+      "--volume=30",
+      `--speed=${speedUp ? "1.4" : "1.1"}`,
       mp3File
     ],
   },
@@ -61,11 +66,11 @@ const playerByPort = {
     args: (mp3File) => ["-2", "-q", "--headless", mp3File],
   },
   3303: {
-    program: "mpv",
+    program: "ffplay",
     args: (mp3File, speedUp) => [
-      "--no-video",
-      "--volume=30",
-      `--speed=${speedUp ? "1.6" : "1.1"}`,
+      "-nodisp", "-autoexit",
+      "-volume", "30",
+      "-af", `atempo=${speedUp ? "1.4" : "1.1"}`,
       mp3File
     ],
   },
@@ -127,6 +132,7 @@ let state = {
   autoplaying: false,
   lastReadLineIndex: 0,
   currentAudioProcess: null,
+  stopAfter: null,
 };
 
 const generateMp3Path = (lineText) => {
@@ -266,8 +272,8 @@ app.get("/stop", async (_req, res) => {
     state.currentAudioProcess.kill();
   }
   state = {
+    ...state,
     autoplaying: false,
-    lastReadLineIndex: state.lastReadLineIndex,
     currentAudioProcess: null,
   };
   res.send("Stopped audio");
@@ -281,6 +287,7 @@ async function startAutoplay(reqLogger, language) {
       state.currentAudioProcess.kill();
     }
     state = {
+      ...state,
       autoplaying: true,
       lastReadLineIndex: 0,
       lastLanguage: language,
@@ -318,7 +325,18 @@ async function startAutoplay(reqLogger, language) {
       );
       state.lastReadLineIndex = state.lastReadLineIndex + 1;
 
-      if (state.lastReadLineIndex >= txtFile__loadLines(language).length) {
+      function stopAfter() {
+        const optionsFile = path.join(__dirname, `stopAfter.txt`)
+        try {
+          const content = fs.readFileSync(optionsFile, "utf-8")
+          return content === "" ? parseInt(content, 10) : null
+        } catch (e) {
+          console.error(e)
+          return null
+        }
+      }
+
+      if (state.lastReadLineIndex >= (stopAfter() || txtFile__loadLines(language).length)) {
         reqLogger.info("Reached end of file. Stopping autoplay.");
         state.autoplaying = false;
         break;
@@ -386,9 +404,9 @@ app.get("/autoplay_stop", async (_req, res) => {
     state.currentAudioProcess.kill();
   }
   state = {
+    ...state,
     autoplaying: false,
     lastReadLineIndex: 0,
-    lastLanguage: state.lastLanguage,
     currentAudioProcess: null,
   };
   res.send("Autoplay stopped");
@@ -411,6 +429,11 @@ app.get("/refresh_list", async (req, res) => {
   const lines = txtFile__loadLines(language);
   reqLogger.info(`Sending ${lines.length} lines`);
   res.send(lines);
+});
+
+app.get("/set_stop_after/:myint", async (req, res) => {
+  state.stopAfter = req.params.myint === "" ? parseInt(req.params.myint, 10) : null
+  res.send(`${state.stopAfter}`);
 });
 
 app.get("/rofi", async (req, res) => {
